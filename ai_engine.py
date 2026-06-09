@@ -30,8 +30,8 @@ V. REGULATED PRODUCTS
 * Alcohol Beverages: Must carry the mandatory statement "DRINK RESPONSIBLY", target persons of legal age (21+), and avoid appealing to minors.
 """
 
-def check_ad_compliance(api_key, file_bytes, file_name, mime_type):
-    """Uploads media to Gemini, runs the prompt, and returns JSON."""
+def check_ad_compliance(api_key, file_bytes, file_name, mime_type, model_name):
+    """Uploads media to Gemini, runs the prompt using the selected model, and returns JSON."""
     client = genai.Client(api_key=api_key)
 
     # 1. Save the Streamlit upload to a temporary file
@@ -44,9 +44,8 @@ def check_ad_compliance(api_key, file_bytes, file_name, mime_type):
         # 2. Upload the file to Google's secure servers
         uploaded_file = client.files.upload(file=temp_path)
 
-        # 3. If it's a video, we must wait for Google to process the frames
+        # 3. If it's a video, wait for Google to process the frames
         if "video" in mime_type:
-            # Refresh the file status until it is ACTIVE
             while uploaded_file.state.name == "PROCESSING":
                 time.sleep(3)
                 uploaded_file = client.files.get(name=uploaded_file.name)
@@ -70,22 +69,20 @@ def check_ad_compliance(api_key, file_bytes, file_name, mime_type):
         ]
         """
 
-        # 5. Call the AI
+        # 5. Call the AI with the dynamically passed model name
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model=model_name,
             contents=[uploaded_file, prompt],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
             )
         )
 
-        # 6. Delete the file from Google's servers to save space
+        # 6. Delete the file from Google's servers
         client.files.delete(name=uploaded_file.name)
 
-        # Return the parsed JSON
         return json.loads(response.text)
 
     finally:
-        # Clean up the local temp file
         if os.path.exists(temp_path):
             os.remove(temp_path)
