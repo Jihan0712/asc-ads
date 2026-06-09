@@ -1,2 +1,5 @@
 streamlit
-google-genai
+openai
+opencv-python
+moviepy
+pypdf
