@@ -72,7 +72,7 @@ def check_ad_compliance(api_key, file_bytes, file_name, mime_type):
 
         # 5. Call the AI
         response = client.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-1.5-flash',
             contents=[uploaded_file, prompt],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
