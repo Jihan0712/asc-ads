@@ -1,8 +1,9 @@
 import json
+import tempfile
+import os
+import time
 from google import genai
 from google.genai import types
-from google.genai.errors import APIError
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # --- HARDCODED ASC GUIDELINES ---
 ASC_RULES = """
@@ -22,7 +23,6 @@ III. PROTECTION OF CHILDREN
 IV. ADVERTISING CLAIMS
 * No. 1 / Leadership: Requires at least 12-month cumulative data on both retail volume and value from an independent source.
 * Absolute Claims (e.g., "100% germ-free"): Requires at least three separate identical tests by an independent 3rd-party testing agency.
-* Comparative Claims: Allowed if providing clear, substantiated bases from an independent source.
 
 V. REGULATED PRODUCTS
 * OTC Drugs / Home Remedies: Must clearly display the Generic Name prominently over the Brand Name and include the mandatory statement "If symptoms persist, consult your doctor."
@@ -30,48 +30,62 @@ V. REGULATED PRODUCTS
 * Alcohol Beverages: Must carry the mandatory statement "DRINK RESPONSIBLY", target persons of legal age (21+), and avoid appealing to minors.
 """
 
-@retry(
-    stop=stop_after_attempt(4),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception_type(APIError),
-    reraise=True
-)
-def call_gemini_with_retry(client, gemini_media_file, prompt):
-    """Executes the API call with automatic backoff for rate limits."""
-    return client.models.generate_content(
-        model='gemini-2.0-flash',
-        contents=[gemini_media_file, prompt],
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-        )
-    )
-
-def evaluate_ad(api_key, gemini_media_file):
-    """
-    Prompts Gemini 2.0 Flash to evaluate the media based on the hardcoded ASC guidelines.
-    """
+def check_ad_compliance(api_key, file_bytes, file_name, mime_type):
+    """Uploads media to Gemini, runs the prompt, and returns JSON."""
     client = genai.Client(api_key=api_key)
+
+    # 1. Save the Streamlit upload to a temporary file
+    ext = os.path.splitext(file_name)[1]
+    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as temp_file:
+        temp_file.write(file_bytes)
+        temp_path = temp_file.name
+
+    try:
+        # 2. Upload the file to Google's secure servers
+        uploaded_file = client.files.upload(file=temp_path)
+
+        # 3. If it's a video, we must wait for Google to process the frames
+        if "video" in mime_type:
+            # Refresh the file status until it is ACTIVE
+            while uploaded_file.state.name == "PROCESSING":
+                time.sleep(3)
+                uploaded_file = client.files.get(name=uploaded_file.name)
+            
+            if uploaded_file.state.name == "FAILED":
+                raise Exception("Google Gemini failed to process this video file.")
+
+        # 4. Build the prompt
+        prompt = f"""
+        You are an expert Philippine Ad Compliance Checker. 
+        Review the attached media against these core Ad Standards Council (ASC) rules:
+        {ASC_RULES}
         
-    prompt = f"""
-    You are an expert Philippine Ad Compliance Checker. 
-    Review the attached media (video/image) against the following core Ad Standards Council (ASC) rules:
-    
-    {ASC_RULES}
-    
-    Evaluate the media against these guidelines and determine if the ad PASSES or FAILS.
-    Pay special attention to mandatory phrases for regulated products.
-    
-    Return your analysis strictly in JSON format matching this schema:
-    [
-      {{
-        "rule_id": "Name of the specific rule (e.g., Regulated Products: Alcohol)",
-        "status": "PASS or FAIL",
-        "reason": "Detailed explanation of why it passed or failed based on what you saw/heard."
-      }}
-    ]
-    """
-    
-    # Call the retry-protected function (No PDF passed this time)
-    response = call_gemini_with_retry(client, gemini_media_file, prompt)
-    
-    return json.loads(response.text)
+        Return your analysis STRICTLY as a JSON array matching this exact format:
+        [
+          {{
+            "rule_id": "Name of the rule",
+            "status": "PASS or FAIL",
+            "reason": "Why it passed or failed based on what you see/hear."
+          }}
+        ]
+        """
+
+        # 5. Call the AI
+        response = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=[uploaded_file, prompt],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+            )
+        )
+
+        # 6. Delete the file from Google's servers to save space
+        client.files.delete(name=uploaded_file.name)
+
+        # Return the parsed JSON
+        return json.loads(response.text)
+
+    finally:
+        # Clean up the local temp file
+        if os.path.exists(temp_path):
+            os.remove(temp_path)

@@ -1,47 +1,46 @@
 import streamlit as st
-from media_processor import upload_to_gemini
-from ai_engine import evaluate_ad
+from ai_engine import check_ad_compliance
 
-# --- Configuration ---
-st.set_page_config(page_title="AI Ad Checker", layout="centered") # Changed to centered for a cleaner look
+# --- Page Config ---
+st.set_page_config(page_title="ASC Ad Checker", layout="centered")
 
 # --- Sidebar ---
 st.sidebar.title("Settings")
 api_key = st.sidebar.text_input("Gemini API Key", type="password")
 st.sidebar.markdown("---")
+st.sidebar.info("This tool uses Gemini 2.0 Flash to instantly check ads against Philippine ASC guidelines.")
 
+# --- Main App ---
 st.title("🎥 ASC Ad Compliance Checker")
-st.write("Upload your Ad Media (Image or Video) to run an instant compliance check against Philippine ASC Guidelines.")
+st.write("Upload an Image or Video advertisement to check for compliance.")
 
-# File Uploader (Only Media now!)
-media_file = st.file_uploader("Upload Ad (Video or Image)", type=["mp4", "mov", "jpg", "png", "jpeg"])
+# Upload Widget
+media_file = st.file_uploader("Upload Advertisement", type=["mp4", "mov", "jpg", "png", "jpeg"])
 
 if media_file:
-    if st.button("Run AI Check", type="primary", use_container_width=True):
+    if st.button("Run Compliance Check", type="primary", use_container_width=True):
         if not api_key:
-            st.error("Please enter your Google Gemini API Key in the sidebar.")
+            st.error("⚠️ Please enter your Gemini API Key in the sidebar.")
         else:
-            with st.spinner("Analyzing media with Gemini 2.0 Flash..."):
+            with st.spinner("Analyzing media with Google Gemini..."):
                 try:
-                    # 1. Upload the Ad Media to Gemini
-                    gemini_media = upload_to_gemini(
-                        api_key=api_key, 
-                        file_bytes=media_file.getvalue(), 
-                        file_name=media_file.name
+                    # Run the engine
+                    results = check_ad_compliance(
+                        api_key=api_key,
+                        file_bytes=media_file.getvalue(),
+                        file_name=media_file.name,
+                        mime_type=media_file.type
                     )
                     
-                    # 2. Run the AI evaluation (No PDF needed)
-                    results = evaluate_ad(api_key, gemini_media)
-                    
-                    # 3. Display Results
-                    st.subheader("Evaluation Results")
+                    # Display Results
+                    st.subheader("Analysis Results")
                     for item in results:
                         if item.get("status") == "PASS":
                             st.success(f"✅ **{item.get('rule_id')}** - PASS")
                             st.caption(item.get('reason'))
                         else:
                             st.error(f"❌ **{item.get('rule_id')}** - FAIL")
-                            st.write(f"**Violation Details:** {item.get('reason')}")
+                            st.write(f"**Details:** {item.get('reason')}")
                             
                 except Exception as e:
-                    st.error(f"An error occurred: {e}")
+                    st.error(f"🚨 An error occurred: {e}")
