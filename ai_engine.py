@@ -28,8 +28,9 @@ def evaluate_ad(api_key, gemini_media_file, gemini_pdf_file):
     """
     
     # Call Gemini 1.5 Pro with both files and force a JSON output
+# New Code
     response = client.models.generate_content(
-        model='gemini-1.5-pro',
+        model='gemini-2.5-pro', 
         contents=[gemini_media_file, gemini_pdf_file, prompt],
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
