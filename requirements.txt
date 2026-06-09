@@ -1,5 +1,5 @@
 streamlit
 openai
-opencv-python
+opencv-python-headless
 moviepy
 pypdf
