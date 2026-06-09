@@ -1,0 +1,19 @@
+{
+  "active_guidelines": [
+    {
+      "id": "RULE_001",
+      "name": "No Profane Language",
+      "description": "The audio and text in the video must not contain explicit or profane language."
+    },
+    {
+      "id": "RULE_002",
+      "name": "Brand Safety Restrictions",
+      "description": "The visual imagery must not display weapons, tobacco products, or illegal substances."
+    },
+    {
+      "id": "RULE_003",
+      "name": "Minimal Text Overlay",
+      "description": "On-screen text must not dominate the visual space. It should feel clean and minimal."
+    }
+  ]
+}
